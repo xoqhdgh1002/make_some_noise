@@ -29,93 +29,143 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // OpenAI Vision API를 사용하여 이미지에서 텍스트 추출 및 설명 생성
-    const prompt = contextImage
+    // ====== 1단계: Vision API로 텍스트/수식 추출 ======
+    const extractionPrompt = contextImage
       ? `다음 두 이미지를 분석해주세요:
 첫 번째 이미지는 사용자가 선택한 주요 영역이고, 두 번째 이미지는 앞뒤 문맥을 포함한 더 넓은 영역입니다.
 
-**중요**: 이 설명은 원본 텍스트를 대체하여 독자가 읽게 됩니다. 따라서 앞뒤 문장과 자연스럽게 이어져야 합니다.
-
-전체 문맥을 고려하여:
-1. 선택된 영역의 텍스트, 수식, 기호를 정확하게 추출해주세요. LaTeX 수식이 있다면 LaTeX 형식으로 표현해주세요.
-
-2. **앞뒤 문맥을 파악**하여 선택된 부분이 전체 내용에서 어떤 역할을 하는지 이해하세요.
-
-3. 설명을 작성할 때:
-   - 앞 문장에서 이어지는 내용이라면, 자연스럽게 연결되도록 작성하세요
-   - 뒤 문장으로 자연스럽게 이어질 수 있도록 마무리하세요
-   - ${difficultyLevel} 설명하되, 문맥의 흐름을 끊지 마세요
-   - 독립된 설명이 아닌, 문단의 일부로 읽힐 수 있도록 작성하세요
-
-4. 문맥상 자연스럽고 이해하기 쉬운 실생활 비유를 제공해주세요.
+**목표**: 선택된 영역의 텍스트/수식을 정확하게 추출하고, 앞뒤 문맥을 파악하세요.
 
 다음 JSON 형식으로 답변해주세요:
 {
-  "extractedText": "추출된 텍스트/수식",
-  "explanation": "앞뒤 문맥과 자연스럽게 이어지는 쉬운 설명",
-  "analogy": "실생활 비유"
-}
-
-예시:
-앞 문장: "이 알고리즘은 데이터를 효율적으로 처리하기 위해"
-선택 영역: "분할 정복(Divide and Conquer) 기법을 사용합니다."
-뒤 문장: "따라서 시간 복잡도가 크게 개선됩니다."
-
-좋은 설명: "문제를 작은 조각으로 나눠서 각각 해결한 다음 합치는 방법을 사용합니다."
-나쁜 설명: "분할 정복 기법은 큰 문제를 작은 문제로 나누는 알고리즘 설계 기법입니다. 이것은..." (앞뒤 문맥과 단절됨)`
-      : `이 이미지를 분석하여 다음을 제공해주세요:
-
-1. 이미지에 있는 모든 텍스트, 수식, 기호를 정확하게 추출해주세요. LaTeX 수식이 있다면 LaTeX 형식으로 표현해주세요.
-2. 추출한 내용을 ${difficultyLevel} 설명해주세요.
-3. 이해하기 쉬운 실생활 비유를 제공해주세요.
+  "selectedText": "선택된 영역의 정확한 텍스트/수식 (LaTeX 포함)",
+  "beforeContext": "선택 영역 앞부분의 텍스트 (2-3문장)",
+  "afterContext": "선택 영역 뒷부분의 텍스트 (2-3문장)"
+}`
+      : `이 이미지에서 모든 텍스트와 수식을 정확하게 추출해주세요. LaTeX 수식은 LaTeX 형식으로 표현해주세요.
 
 다음 JSON 형식으로 답변해주세요:
 {
-  "extractedText": "추출된 텍스트/수식",
-  "explanation": "쉬운 설명",
-  "analogy": "실생활 비유"
+  "selectedText": "추출된 텍스트/수식",
+  "beforeContext": "",
+  "afterContext": ""
 }`;
 
-    const messageContent: any[] = [{ type: 'text', text: prompt }, { type: 'image', image: image }];
+    const extractionContent: any[] = [
+      { type: 'text', text: extractionPrompt },
+      { type: 'image', image: image },
+    ];
 
-    // 컨텍스트 이미지가 있으면 추가
     if (contextImage) {
-      messageContent.push({ type: 'image', image: contextImage });
+      extractionContent.push({ type: 'image', image: contextImage });
     }
 
-    const { text: result } = await generateText({
+    const { text: extractionResult } = await generateText({
       model: openai('gpt-4o'),
       messages: [
         {
           role: 'user',
-          content: messageContent,
+          content: extractionContent,
+        },
+      ],
+      maxTokens: 800,
+    });
+
+    // 추출 결과 파싱
+    let selectedText = '';
+    let beforeContext = '';
+    let afterContext = '';
+
+    try {
+      const jsonMatch = extractionResult.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        selectedText = parsed.selectedText || '';
+        beforeContext = parsed.beforeContext || '';
+        afterContext = parsed.afterContext || '';
+      }
+    } catch (e) {
+      console.error('1단계 JSON 파싱 오류:', e);
+      selectedText = extractionResult;
+    }
+
+    if (!selectedText) {
+      throw new Error('텍스트 추출 실패');
+    }
+
+    // ====== 2단계: 추출된 텍스트를 쉬운 설명으로 변환 ======
+    const explanationPrompt = `당신은 전문적인 교육 콘텐츠 작성자입니다. 어려운 학술 내용을 쉽게 풀어쓰는 것이 전문입니다.
+
+**상황**: 독자가 전공 서적을 읽다가 어려운 부분을 선택했습니다. 이 부분을 ${difficultyLevel} 설명하여 원본 텍스트를 대체해야 합니다.
+
+**원본 텍스트**: ${selectedText}
+
+${beforeContext ? `**앞 문맥**: ${beforeContext}` : ''}
+${afterContext ? `**뒤 문맥**: ${afterContext}` : ''}
+
+**중요 원칙**:
+1. **문맥 연결성**: 설명은 앞뒤 문장과 자연스럽게 이어져야 합니다
+   - 앞 문장의 내용을 받아서 시작하세요
+   - 뒤 문장으로 자연스럽게 이어지도록 마무리하세요
+   - 독립된 정의가 아닌, 문단의 일부처럼 작성하세요
+
+2. **스타일 가이드**:
+   - "이것은 ~입니다" 같은 정의형 표현 지양
+   - 원문의 톤과 문체 유지
+   - 불필요한 설명 제거, 핵심만 전달
+   - 전문 용어는 일상 언어로 바꾸기
+
+3. **비유 사용**:
+   - 독자가 쉽게 이해할 수 있는 실생활 비유 제공
+   - 비유는 별도 필드에 작성 (본문에 포함하지 말 것)
+
+**좋은 예시**:
+- 원문: "분할 정복(Divide and Conquer) 기법을 사용합니다."
+- 앞 문맥: "이 알고리즘은 데이터를 효율적으로 처리하기 위해"
+- 뒤 문맥: "따라서 시간 복잡도가 크게 개선됩니다."
+- ✅ 좋은 설명: "문제를 작은 조각으로 나눠서 각각 해결한 다음 합치는 방법을 사용합니다."
+- ❌ 나쁜 설명: "분할 정복 기법은 큰 문제를 작은 문제로 나누는 알고리즘 설계 기법입니다..."
+
+다음 JSON 형식으로 답변해주세요:
+{
+  "explanation": "앞뒤 문맥과 자연스럽게 이어지는 쉬운 설명",
+  "analogy": "실생활 비유",
+  "styleNotes": "어떤 점을 고려하여 이렇게 작성했는지 (선택사항)"
+}`;
+
+    const { text: explanationResult } = await generateText({
+      model: openai('gpt-4o'),
+      messages: [
+        {
+          role: 'user',
+          content: explanationPrompt,
         },
       ],
       maxTokens: 1000,
+      temperature: 0.7,
     });
 
-    // JSON 응답 파싱
+    // 설명 결과 파싱
     try {
-      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      const jsonMatch = explanationResult.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         return NextResponse.json({
-          extractedText: parsed.extractedText || '텍스트 추출 실패',
-          explanation: parsed.explanation || result,
+          extractedText: selectedText,
+          explanation: parsed.explanation || explanationResult,
           analogy: parsed.analogy || '',
-          visualization: '이미지 기반 추출 완료',
+          visualization: '2단계 처리 완료',
         });
       }
     } catch (e) {
-      // JSON 파싱 실패 시 전체 결과 반환
-      console.error('JSON 파싱 오류:', e);
+      console.error('2단계 JSON 파싱 오류:', e);
     }
 
     return NextResponse.json({
-      extractedText: '이미지에서 추출된 내용',
-      explanation: result,
+      extractedText: selectedText,
+      explanation: explanationResult,
       analogy: '',
-      visualization: '이미지 분석 완료',
+      visualization: '2단계 처리 완료',
     });
   } catch (error) {
     console.error('설명 생성 중 오류:', error);
