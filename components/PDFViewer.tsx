@@ -6,14 +6,18 @@ import { useAppStore } from '@/lib/store';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
-// PDF.js worker 설정
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-
 export default function PDFViewer() {
   const { pdfDocument, setPdfDocument, translatedAreas } = useAppStore();
   const [pdfInstance, setPdfInstance] = useState<any>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // PDF.js worker 설정 (클라이언트 사이드에서만 실행)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+    }
+  }, []);
 
   // PDF 로드
   useEffect(() => {
