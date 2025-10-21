@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/lib/store';
 import { CropArea } from '@/lib/types';
+import CropConfirmModal from './CropConfirmModal';
 
 interface CropOverlayProps {
   onCropComplete: (
@@ -20,6 +21,16 @@ export default function CropOverlay({ onCropComplete, canvasRef }: CropOverlayPr
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [currentPos, setCurrentPos] = useState({ x: 0, y: 0 });
   const overlayRef = useRef<HTMLDivElement>(null);
+
+  // 확인 모달 상태
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingCrop, setPendingCrop] = useState<{
+    cropArea: CropArea;
+    croppedImage: string;
+    contextImage: string;
+    backgroundColor: string;
+    textColor: string;
+  } | null>(null);
 
   const { pdfDocument, setIsSelecting } = useAppStore();
 
@@ -74,18 +85,41 @@ export default function CropOverlay({ onCropComplete, canvasRef }: CropOverlayPr
     const result = await extractImageFromCrop(cropArea);
 
     if (result) {
-      onCropComplete(
+      // 확인 모달 표시
+      setPendingCrop({
         cropArea,
-        result.croppedImage,
-        result.contextImage,
-        result.backgroundColor,
-        result.textColor
-      );
+        croppedImage: result.croppedImage,
+        contextImage: result.contextImage,
+        backgroundColor: result.backgroundColor,
+        textColor: result.textColor,
+      });
+      setShowConfirmModal(true);
     }
 
     // 선택 영역 초기화
     setStartPos({ x: 0, y: 0 });
     setCurrentPos({ x: 0, y: 0 });
+  };
+
+  // 확인 모달에서 "확인" 클릭 시
+  const handleConfirm = () => {
+    if (pendingCrop) {
+      onCropComplete(
+        pendingCrop.cropArea,
+        pendingCrop.croppedImage,
+        pendingCrop.contextImage,
+        pendingCrop.backgroundColor,
+        pendingCrop.textColor
+      );
+    }
+    setShowConfirmModal(false);
+    setPendingCrop(null);
+  };
+
+  // 확인 모달에서 "다시 선택" 클릭 시
+  const handleCancel = () => {
+    setShowConfirmModal(false);
+    setPendingCrop(null);
   };
 
   const extractImageFromCrop = async (cropArea: CropArea): Promise<{
@@ -195,30 +229,41 @@ export default function CropOverlay({ onCropComplete, canvasRef }: CropOverlayPr
   };
 
   return (
-    <div
-      ref={overlayRef}
-      className="absolute inset-0 cursor-crosshair z-10"
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={() => {
-        if (isDragging) {
-          setIsDragging(false);
-          setIsSelecting(false);
-        }
-      }}
-    >
-      {/* 크롭 선택 영역 */}
-      {isDragging && (
-        <div
-          className="absolute border-2 border-blue-500 bg-blue-100 bg-opacity-30"
-          style={getCropStyle()}
-        >
-          <div className="absolute -top-8 left-0 bg-blue-500 text-white text-xs px-2 py-1 rounded">
-            드래그하여 선택하세요
+    <>
+      <div
+        ref={overlayRef}
+        className="absolute inset-0 cursor-crosshair z-10"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => {
+          if (isDragging) {
+            setIsDragging(false);
+            setIsSelecting(false);
+          }
+        }}
+      >
+        {/* 크롭 선택 영역 */}
+        {isDragging && (
+          <div
+            className="absolute border-2 border-blue-500 bg-blue-100 bg-opacity-30"
+            style={getCropStyle()}
+          >
+            <div className="absolute -top-8 left-0 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+              드래그하여 선택하세요
+            </div>
           </div>
-        </div>
+        )}
+      </div>
+
+      {/* 확인 모달 */}
+      {showConfirmModal && pendingCrop && (
+        <CropConfirmModal
+          croppedImage={pendingCrop.croppedImage}
+          onConfirm={handleConfirm}
+          onCancel={handleCancel}
+        />
       )}
-    </div>
+    </>
   );
 }
