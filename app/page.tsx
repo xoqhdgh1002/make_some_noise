@@ -22,11 +22,17 @@ export default function Home() {
     setIsLoading,
   } = useAppStore();
 
-  const handleCropComplete = async (cropArea: CropArea, croppedImage: string) => {
+  const handleCropComplete = async (
+    cropArea: CropArea,
+    croppedImage: string,
+    contextImage: string,
+    backgroundColor: string,
+    textColor: string
+  ) => {
     setIsLoading(true);
 
     try {
-      // AI 설명 생성 API 호출 (이미지를 보내서 텍스트 추출 및 설명 생성)
+      // AI 설명 생성 API 호출 (이미지 + 컨텍스트를 보내서 텍스트 추출 및 설명 생성)
       const response = await fetch('/api/explain', {
         method: 'POST',
         headers: {
@@ -34,6 +40,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           image: croppedImage,
+          contextImage: contextImage,
           difficulty,
         }),
       });
@@ -50,7 +57,7 @@ export default function Home() {
       const newExplanation: Explanation = {
         id,
         cropArea,
-        croppedText: selectedText,
+        croppedText: data.extractedText || '추출된 텍스트',
         difficulty,
         explanation: data.explanation,
         analogy: data.analogy,
@@ -65,6 +72,8 @@ export default function Home() {
         originalText: data.extractedText || '추출된 텍스트',
         translatedText: data.explanation,
         isVisible: true,
+        backgroundColor,
+        textColor,
       };
 
       // 설명 저장 및 패널 열기

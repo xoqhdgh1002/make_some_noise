@@ -7,7 +7,13 @@ import { CropArea } from '@/lib/types';
 import dynamic from 'next/dynamic';
 
 interface PDFViewerProps {
-  onCropComplete: (cropArea: CropArea, croppedImage: string) => void;
+  onCropComplete: (
+    cropArea: CropArea,
+    croppedImage: string,
+    contextImage: string,
+    backgroundColor: string,
+    textColor: string
+  ) => void;
 }
 
 export default function PDFViewer({ onCropComplete }: PDFViewerProps) {
@@ -133,15 +139,19 @@ export default function PDFViewer({ onCropComplete }: PDFViewerProps) {
           {currentPageTranslations.map((area) => (
             <div
               key={area.id}
-              className="absolute bg-yellow-100 bg-opacity-95 border-2 border-yellow-400 p-2 rounded shadow-lg"
+              className="absolute p-2 rounded"
               style={{
                 left: `${area.cropArea.x}px`,
                 top: `${area.cropArea.y}px`,
                 width: `${area.cropArea.width}px`,
                 minHeight: `${area.cropArea.height}px`,
+                backgroundColor: area.backgroundColor || '#FEF3C7',
+                color: area.textColor || '#1F2937',
+                border: `1px solid ${area.backgroundColor ? 'rgba(0,0,0,0.1)' : '#FDE68A'}`,
+                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
               }}
             >
-              <p className="text-sm leading-relaxed text-gray-800">
+              <p className="text-sm leading-relaxed">
                 {area.translatedText}
               </p>
             </div>

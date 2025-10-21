@@ -5,7 +5,13 @@ import { useAppStore } from '@/lib/store';
 import { CropArea } from '@/lib/types';
 
 interface CropOverlayProps {
-  onCropComplete: (cropArea: CropArea, croppedImage: string) => void;
+  onCropComplete: (
+    cropArea: CropArea,
+    croppedImage: string,
+    contextImage: string,
+    backgroundColor: string,
+    textColor: string
+  ) => void;
   canvasRef: React.RefObject<HTMLCanvasElement>;
 }
 
@@ -65,10 +71,16 @@ export default function CropOverlay({ onCropComplete, canvasRef }: CropOverlayPr
     };
 
     // 크롭 영역의 이미지 추출
-    const croppedImage = await extractImageFromCrop(cropArea);
+    const result = await extractImageFromCrop(cropArea);
 
-    if (croppedImage) {
-      onCropComplete(cropArea, croppedImage);
+    if (result) {
+      onCropComplete(
+        cropArea,
+        result.croppedImage,
+        result.contextImage,
+        result.backgroundColor,
+        result.textColor
+      );
     }
 
     // 선택 영역 초기화
@@ -76,28 +88,94 @@ export default function CropOverlay({ onCropComplete, canvasRef }: CropOverlayPr
     setCurrentPos({ x: 0, y: 0 });
   };
 
-  const extractImageFromCrop = async (cropArea: CropArea): Promise<string | null> => {
+  const extractImageFromCrop = async (cropArea: CropArea): Promise<{
+    croppedImage: string;
+    contextImage: string;
+    backgroundColor: string;
+    textColor: string;
+  } | null> => {
     if (!canvasRef.current) return null;
 
     const canvas = canvasRef.current;
 
-    // 새로운 캔버스 생성하여 크롭 영역만 추출
+    // 1. 크롭 영역만 추출
     const croppedCanvas = document.createElement('canvas');
     croppedCanvas.width = cropArea.width;
     croppedCanvas.height = cropArea.height;
 
-    const ctx = croppedCanvas.getContext('2d');
-    if (!ctx) return null;
+    const croppedCtx = croppedCanvas.getContext('2d');
+    if (!croppedCtx) return null;
 
-    // 원본 캔버스에서 크롭 영역 복사
-    ctx.drawImage(
+    croppedCtx.drawImage(
       canvas,
       cropArea.x, cropArea.y, cropArea.width, cropArea.height,
       0, 0, cropArea.width, cropArea.height
     );
 
-    // base64 이미지로 변환
-    return croppedCanvas.toDataURL('image/png');
+    // 2. 컨텍스트 영역 (앞뒤 포함) 추출
+    // 위아래로 크롭 영역의 2배 크기만큼 확장
+    const contextPadding = cropArea.height * 2;
+    const contextX = cropArea.x;
+    const contextY = Math.max(0, cropArea.y - contextPadding);
+    const contextWidth = cropArea.width;
+    const contextHeight = Math.min(
+      canvas.height - contextY,
+      cropArea.height + contextPadding * 2
+    );
+
+    const contextCanvas = document.createElement('canvas');
+    contextCanvas.width = contextWidth;
+    contextCanvas.height = contextHeight;
+
+    const contextCtx = contextCanvas.getContext('2d');
+    if (!contextCtx) return null;
+
+    contextCtx.drawImage(
+      canvas,
+      contextX, contextY, contextWidth, contextHeight,
+      0, 0, contextWidth, contextHeight
+    );
+
+    // 3. 배경색 추출 (크롭 영역의 평균 색상)
+    const imageData = croppedCtx.getImageData(0, 0, cropArea.width, cropArea.height);
+    const { backgroundColor, textColor } = extractColors(imageData);
+
+    return {
+      croppedImage: croppedCanvas.toDataURL('image/png'),
+      contextImage: contextCanvas.toDataURL('image/png'),
+      backgroundColor,
+      textColor,
+    };
+  };
+
+  const extractColors = (imageData: ImageData): { backgroundColor: string; textColor: string } => {
+    const data = imageData.data;
+    let r = 0, g = 0, b = 0;
+    let pixelCount = 0;
+
+    // 샘플링 (성능을 위해 10픽셀마다 1개씩)
+    for (let i = 0; i < data.length; i += 40) { // RGBA이므로 4씩 건너뛰기 * 10
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
+      pixelCount++;
+    }
+
+    // 평균 색상 계산
+    r = Math.round(r / pixelCount);
+    g = Math.round(g / pixelCount);
+    b = Math.round(b / pixelCount);
+
+    // 밝기 계산 (0-255)
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+    // 텍스트 색상 결정 (배경이 밝으면 검정, 어두우면 흰색)
+    const textColor = brightness > 128 ? '#000000' : '#FFFFFF';
+
+    return {
+      backgroundColor: `rgb(${r}, ${g}, ${b})`,
+      textColor,
+    };
   };
 
   const getCropStyle = () => {

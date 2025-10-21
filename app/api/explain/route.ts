@@ -4,7 +4,7 @@ import { generateText } from 'ai';
 
 export async function POST(req: NextRequest) {
   try {
-    const { image, difficulty } = await req.json();
+    const { image, contextImage, difficulty } = await req.json();
 
     if (!image) {
       return NextResponse.json({ error: '이미지가 필요합니다.' }, { status: 400 });
@@ -30,7 +30,22 @@ export async function POST(req: NextRequest) {
     }
 
     // OpenAI Vision API를 사용하여 이미지에서 텍스트 추출 및 설명 생성
-    const prompt = `이 이미지를 분석하여 다음을 제공해주세요:
+    const prompt = contextImage
+      ? `다음 두 이미지를 분석해주세요:
+첫 번째 이미지는 사용자가 선택한 주요 영역이고, 두 번째 이미지는 앞뒤 문맥을 포함한 더 넓은 영역입니다.
+
+전체 문맥을 고려하여:
+1. 선택된 영역의 텍스트, 수식, 기호를 정확하게 추출해주세요. LaTeX 수식이 있다면 LaTeX 형식으로 표현해주세요.
+2. 앞뒤 문맥을 파악하여, 선택된 부분이 전체 내용에서 어떤 역할을 하는지 이해하고 ${difficultyLevel} 설명해주세요.
+3. 문맥상 자연스럽고 이해하기 쉬운 실생활 비유를 제공해주세요.
+
+다음 JSON 형식으로 답변해주세요:
+{
+  "extractedText": "추출된 텍스트/수식",
+  "explanation": "전체 문맥을 고려한 쉬운 설명",
+  "analogy": "실생활 비유"
+}`
+      : `이 이미지를 분석하여 다음을 제공해주세요:
 
 1. 이미지에 있는 모든 텍스트, 수식, 기호를 정확하게 추출해주세요. LaTeX 수식이 있다면 LaTeX 형식으로 표현해주세요.
 2. 추출한 내용을 ${difficultyLevel} 설명해주세요.
@@ -43,15 +58,19 @@ export async function POST(req: NextRequest) {
   "analogy": "실생활 비유"
 }`;
 
+    const messageContent: any[] = [{ type: 'text', text: prompt }, { type: 'image', image: image }];
+
+    // 컨텍스트 이미지가 있으면 추가
+    if (contextImage) {
+      messageContent.push({ type: 'image', image: contextImage });
+    }
+
     const { text: result } = await generateText({
       model: openai('gpt-4o'),
       messages: [
         {
           role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image', image: image },
-          ],
+          content: messageContent,
         },
       ],
       maxTokens: 1000,

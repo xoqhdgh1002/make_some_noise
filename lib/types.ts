@@ -33,4 +33,6 @@ export interface TranslatedArea {
   originalText: string;
   translatedText: string;
   isVisible: boolean;
+  backgroundColor?: string;
+  textColor?: string;
 }
