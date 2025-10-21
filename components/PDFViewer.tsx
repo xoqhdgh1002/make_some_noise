@@ -11,6 +11,7 @@ export default function PDFViewer() {
   const [pdfInstance, setPdfInstance] = useState<any>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const renderTaskRef = useRef<any>(null);
 
   // PDF.js worker 설정 (클라이언트 사이드에서만 실행)
   useEffect(() => {
@@ -45,24 +46,46 @@ export default function PDFViewer() {
   useEffect(() => {
     if (!pdfInstance || !canvasRef.current) return;
 
+    // 이전 렌더링 작업이 있으면 취소
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel();
+    }
+
     const renderPage = async () => {
-      const page = await pdfInstance.getPage(pdfDocument.currentPage);
-      const canvas = canvasRef.current!;
-      const context = canvas.getContext('2d')!;
+      try {
+        const page = await pdfInstance.getPage(pdfDocument.currentPage);
+        const canvas = canvasRef.current!;
+        const context = canvas.getContext('2d')!;
 
-      const viewport = page.getViewport({ scale: 1.5 });
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
+        const viewport = page.getViewport({ scale: 1.5 });
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
 
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-      };
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport,
+        };
 
-      await page.render(renderContext).promise;
+        renderTaskRef.current = page.render(renderContext);
+        await renderTaskRef.current.promise;
+        renderTaskRef.current = null;
+      } catch (error: any) {
+        if (error?.name === 'RenderingCancelledException') {
+          // 렌더링이 취소된 경우 무시
+          return;
+        }
+        console.error('페이지 렌더링 오류:', error);
+      }
     };
 
     renderPage();
+
+    // cleanup: 컴포넌트 언마운트 시 렌더링 취소
+    return () => {
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel();
+      }
+    };
   }, [pdfInstance, pdfDocument.currentPage]);
 
   const changePage = (offset: number) => {
