@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import FileUpload from '@/components/FileUpload';
 import PDFViewer from '@/components/PDFViewer';
-import CropOverlay from '@/components/CropOverlay';
 import DifficultySlider from '@/components/DifficultySlider';
 import ExplanationPanel from '@/components/ExplanationPanel';
 import TranslationManager from '@/components/TranslationManager';
@@ -23,18 +22,18 @@ export default function Home() {
     setIsLoading,
   } = useAppStore();
 
-  const handleCropComplete = async (cropArea: CropArea, selectedText: string) => {
+  const handleCropComplete = async (cropArea: CropArea, croppedImage: string) => {
     setIsLoading(true);
 
     try {
-      // AI 설명 생성 API 호출
+      // AI 설명 생성 API 호출 (이미지를 보내서 텍스트 추출 및 설명 생성)
       const response = await fetch('/api/explain', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: selectedText,
+          image: croppedImage,
           difficulty,
         }),
       });
@@ -63,7 +62,7 @@ export default function Home() {
       const translatedArea: TranslatedArea = {
         id,
         cropArea,
-        originalText: selectedText,
+        originalText: data.extractedText || '추출된 텍스트',
         translatedText: data.explanation,
         isVisible: true,
       };
@@ -174,8 +173,7 @@ export default function Home() {
 
             {/* 오른쪽: PDF 뷰어 */}
             <div className="lg:col-span-2 bg-white rounded-lg shadow-md p-4 relative min-h-[600px]">
-              <PDFViewer />
-              <CropOverlay onCropComplete={handleCropComplete} />
+              <PDFViewer onCropComplete={handleCropComplete} />
 
               {/* 로딩 오버레이 */}
               {isLoading && (

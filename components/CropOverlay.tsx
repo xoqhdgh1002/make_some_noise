@@ -5,10 +5,11 @@ import { useAppStore } from '@/lib/store';
 import { CropArea } from '@/lib/types';
 
 interface CropOverlayProps {
-  onCropComplete: (cropArea: CropArea, selectedText: string) => void;
+  onCropComplete: (cropArea: CropArea, croppedImage: string) => void;
+  canvasRef: React.RefObject<HTMLCanvasElement>;
 }
 
-export default function CropOverlay({ onCropComplete }: CropOverlayProps) {
+export default function CropOverlay({ onCropComplete, canvasRef }: CropOverlayProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [currentPos, setCurrentPos] = useState({ x: 0, y: 0 });
@@ -63,20 +64,40 @@ export default function CropOverlay({ onCropComplete }: CropOverlayProps) {
       pageNumber: pdfDocument.currentPage,
     };
 
-    // 선택된 텍스트 추출 (실제로는 PDF에서 텍스트를 추출해야 하지만, 여기서는 시뮬레이션)
-    const selectedText = await extractTextFromCrop(cropArea);
+    // 크롭 영역의 이미지 추출
+    const croppedImage = await extractImageFromCrop(cropArea);
 
-    onCropComplete(cropArea, selectedText);
+    if (croppedImage) {
+      onCropComplete(cropArea, croppedImage);
+    }
 
     // 선택 영역 초기화
     setStartPos({ x: 0, y: 0 });
     setCurrentPos({ x: 0, y: 0 });
   };
 
-  const extractTextFromCrop = async (cropArea: CropArea): Promise<string> => {
-    // 실제 구현에서는 PDF.js의 getTextContent를 사용하여 텍스트 추출
-    // 여기서는 데모용으로 더미 텍스트 반환
-    return `선택된 영역의 텍스트 (페이지 ${cropArea.pageNumber})`;
+  const extractImageFromCrop = async (cropArea: CropArea): Promise<string | null> => {
+    if (!canvasRef.current) return null;
+
+    const canvas = canvasRef.current;
+
+    // 새로운 캔버스 생성하여 크롭 영역만 추출
+    const croppedCanvas = document.createElement('canvas');
+    croppedCanvas.width = cropArea.width;
+    croppedCanvas.height = cropArea.height;
+
+    const ctx = croppedCanvas.getContext('2d');
+    if (!ctx) return null;
+
+    // 원본 캔버스에서 크롭 영역 복사
+    ctx.drawImage(
+      canvas,
+      cropArea.x, cropArea.y, cropArea.width, cropArea.height,
+      0, 0, cropArea.width, cropArea.height
+    );
+
+    // base64 이미지로 변환
+    return croppedCanvas.toDataURL('image/png');
   };
 
   const getCropStyle = () => {

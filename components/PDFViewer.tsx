@@ -3,10 +3,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { pdfjs } from 'react-pdf';
 import { useAppStore } from '@/lib/store';
+import CropOverlay from './CropOverlay';
+import { CropArea } from '@/lib/types';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
-export default function PDFViewer() {
+interface PDFViewerProps {
+  onCropComplete: (cropArea: CropArea, croppedImage: string) => void;
+}
+
+export default function PDFViewer({ onCropComplete }: PDFViewerProps) {
   const { pdfDocument, setPdfDocument, translatedAreas } = useAppStore();
   const [pdfInstance, setPdfInstance] = useState<any>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -108,6 +114,9 @@ export default function PDFViewer() {
       {pdfDocument.file && (
         <div className="relative">
           <canvas ref={canvasRef} className="shadow-lg" />
+
+          {/* 크롭 오버레이 */}
+          <CropOverlay canvasRef={canvasRef} onCropComplete={onCropComplete} />
 
           {/* 번역된 텍스트 오버레이 */}
           {currentPageTranslations.map((area) => (
