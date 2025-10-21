@@ -7,7 +7,8 @@ import PDFViewer from '@/components/PDFViewer';
 import CropOverlay from '@/components/CropOverlay';
 import DifficultySlider from '@/components/DifficultySlider';
 import ExplanationPanel from '@/components/ExplanationPanel';
-import { CropArea, Explanation } from '@/lib/types';
+import TranslationManager from '@/components/TranslationManager';
+import { CropArea, Explanation, TranslatedArea } from '@/lib/types';
 import { Sparkles } from 'lucide-react';
 
 export default function Home() {
@@ -17,6 +18,7 @@ export default function Home() {
     selectedExplanation,
     setSelectedExplanation,
     addExplanation,
+    addTranslatedArea,
     isLoading,
     setIsLoading,
   } = useAppStore();
@@ -43,9 +45,11 @@ export default function Home() {
 
       const data = await response.json();
 
+      const id = Date.now().toString();
+
       // 새로운 설명 객체 생성
       const newExplanation: Explanation = {
-        id: Date.now().toString(),
+        id,
         cropArea,
         croppedText: selectedText,
         difficulty,
@@ -55,8 +59,18 @@ export default function Home() {
         timestamp: Date.now(),
       };
 
+      // 번역된 영역 추가 (PDF 위에 오버레이될 내용)
+      const translatedArea: TranslatedArea = {
+        id,
+        cropArea,
+        originalText: selectedText,
+        translatedText: data.explanation,
+        isVisible: true,
+      };
+
       // 설명 저장 및 패널 열기
       addExplanation(newExplanation);
+      addTranslatedArea(translatedArea);
       setSelectedExplanation(newExplanation);
     } catch (error) {
       console.error('설명 생성 오류:', error);
@@ -136,6 +150,7 @@ export default function Home() {
             <div className="lg:col-span-1 space-y-4">
               <FileUpload />
               <DifficultySlider />
+              <TranslationManager />
 
               {/* 사용 방법 안내 */}
               <div className="bg-white rounded-lg shadow-md p-6">
@@ -151,7 +166,7 @@ export default function Home() {
                   </li>
                   <li className="flex gap-2">
                     <span className="font-bold text-blue-600">3.</span>
-                    <span>AI의 쉬운 설명을 확인하세요!</span>
+                    <span>쉬운 설명이 해당 영역에 표시됩니다!</span>
                   </li>
                 </ol>
               </div>

@@ -26,3 +26,11 @@ export interface PDFDocument {
   numPages: number;
   currentPage: number;
 }
+
+export interface TranslatedArea {
+  id: string;
+  cropArea: CropArea;
+  originalText: string;
+  translatedText: string;
+  isVisible: boolean;
+}

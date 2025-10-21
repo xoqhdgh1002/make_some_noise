@@ -1,7 +1,7 @@
 // Zustand 상태 관리 스토어
 
 import { create } from 'zustand';
-import { DifficultyLevel, CropArea, Explanation, PDFDocument } from './types';
+import { DifficultyLevel, CropArea, Explanation, PDFDocument, TranslatedArea } from './types';
 
 interface AppState {
   // PDF 관련 상태
@@ -29,6 +29,12 @@ interface AppState {
   // 현재 선택된 설명
   selectedExplanation: Explanation | null;
   setSelectedExplanation: (explanation: Explanation | null) => void;
+
+  // 번역된 영역들
+  translatedAreas: TranslatedArea[];
+  addTranslatedArea: (area: TranslatedArea) => void;
+  toggleTranslatedArea: (id: string) => void;
+  removeTranslatedArea: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -63,4 +69,20 @@ export const useAppStore = create<AppState>((set) => ({
   selectedExplanation: null,
   setSelectedExplanation: (explanation) =>
     set({ selectedExplanation: explanation }),
+
+  translatedAreas: [],
+  addTranslatedArea: (area) =>
+    set((state) => ({
+      translatedAreas: [...state.translatedAreas, area],
+    })),
+  toggleTranslatedArea: (id) =>
+    set((state) => ({
+      translatedAreas: state.translatedAreas.map((area) =>
+        area.id === id ? { ...area, isVisible: !area.isVisible } : area
+      ),
+    })),
+  removeTranslatedArea: (id) =>
+    set((state) => ({
+      translatedAreas: state.translatedAreas.filter((area) => area.id !== id),
+    })),
 }));

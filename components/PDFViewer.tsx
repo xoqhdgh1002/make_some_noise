@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Document, Page, pdfjs } from 'react-pdf';
+import React, { useState, useRef, useEffect } from 'react';
+import { pdfjs } from 'react-pdf';
 import { useAppStore } from '@/lib/store';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -9,17 +9,57 @@ import 'react-pdf/dist/Page/TextLayer.css';
 // PDF.js worker 설정
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-interface PDFViewerProps {
-  onTextSelect?: (text: string, position: { x: number; y: number }) => void;
-}
+export default function PDFViewer() {
+  const { pdfDocument, setPdfDocument, translatedAreas } = useAppStore();
+  const [pdfInstance, setPdfInstance] = useState<any>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
-  const { pdfDocument, setPdfDocument } = useAppStore();
-  const [pageWidth, setPageWidth] = useState(800);
+  // PDF 로드
+  useEffect(() => {
+    if (!pdfDocument.file) return;
 
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setPdfDocument({ numPages, currentPage: 1 });
-  };
+    const loadPDF = async () => {
+      const fileReader = new FileReader();
+
+      fileReader.onload = async (e) => {
+        const typedArray = new Uint8Array(e.target?.result as ArrayBuffer);
+        const loadingTask = pdfjs.getDocument(typedArray);
+        const pdf = await loadingTask.promise;
+
+        setPdfInstance(pdf);
+        setPdfDocument({ numPages: pdf.numPages, currentPage: 1 });
+      };
+
+      fileReader.readAsArrayBuffer(pdfDocument.file);
+    };
+
+    loadPDF();
+  }, [pdfDocument.file]);
+
+  // 페이지 렌더링
+  useEffect(() => {
+    if (!pdfInstance || !canvasRef.current) return;
+
+    const renderPage = async () => {
+      const page = await pdfInstance.getPage(pdfDocument.currentPage);
+      const canvas = canvasRef.current!;
+      const context = canvas.getContext('2d')!;
+
+      const viewport = page.getViewport({ scale: 1.5 });
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport,
+      };
+
+      await page.render(renderContext).promise;
+    };
+
+    renderPage();
+  }, [pdfInstance, pdfDocument.currentPage]);
 
   const changePage = (offset: number) => {
     const newPage = pdfDocument.currentPage + offset;
@@ -28,26 +68,41 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
     }
   };
 
+  // 현재 페이지의 번역된 영역들 필터링
+  const currentPageTranslations = translatedAreas.filter(
+    (area) => area.cropArea.pageNumber === pdfDocument.currentPage && area.isVisible
+  );
+
   return (
-    <div className="flex flex-col items-center w-full h-full bg-gray-50 overflow-auto">
+    <div
+      ref={containerRef}
+      className="flex flex-col items-center w-full h-full bg-gray-50 overflow-auto relative"
+    >
       {pdfDocument.file && (
         <div className="relative">
-          <Document
-            file={pdfDocument.file}
-            onLoadSuccess={onDocumentLoadSuccess}
-            className="pdf-document"
-          >
-            <Page
-              pageNumber={pdfDocument.currentPage}
-              width={pageWidth}
-              renderTextLayer={true}
-              renderAnnotationLayer={true}
-            />
-          </Document>
+          <canvas ref={canvasRef} className="shadow-lg" />
+
+          {/* 번역된 텍스트 오버레이 */}
+          {currentPageTranslations.map((area) => (
+            <div
+              key={area.id}
+              className="absolute bg-yellow-100 bg-opacity-95 border-2 border-yellow-400 p-2 rounded shadow-lg"
+              style={{
+                left: `${area.cropArea.x}px`,
+                top: `${area.cropArea.y}px`,
+                width: `${area.cropArea.width}px`,
+                minHeight: `${area.cropArea.height}px`,
+              }}
+            >
+              <p className="text-sm leading-relaxed text-gray-800">
+                {area.translatedText}
+              </p>
+            </div>
+          ))}
 
           {/* 페이지 네비게이션 */}
           {pdfDocument.numPages > 0 && (
-            <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-6 py-3 flex items-center gap-4">
+            <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-6 py-3 flex items-center gap-4 z-50">
               <button
                 onClick={() => changePage(-1)}
                 disabled={pdfDocument.currentPage <= 1}
