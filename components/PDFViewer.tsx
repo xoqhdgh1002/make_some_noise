@@ -1,12 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { pdfjs } from 'react-pdf';
 import { useAppStore } from '@/lib/store';
 import CropOverlay from './CropOverlay';
 import { CropArea } from '@/lib/types';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
+import dynamic from 'next/dynamic';
 
 interface PDFViewerProps {
   onCropComplete: (cropArea: CropArea, croppedImage: string) => void;
@@ -18,17 +16,22 @@ export default function PDFViewer({ onCropComplete }: PDFViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const renderTaskRef = useRef<any>(null);
+  const [pdfjs, setPdfjs] = useState<any>(null);
 
-  // PDF.js worker 설정 (클라이언트 사이드에서만 실행)
+  // PDF.js 동적 로드 (클라이언트 사이드에서만)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-    }
+    const loadPdfjs = async () => {
+      const pdfjsLib = await import('react-pdf');
+      setPdfjs(pdfjsLib.pdfjs);
+      pdfjsLib.pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.pdfjs.version}/build/pdf.worker.min.mjs`;
+    };
+
+    loadPdfjs();
   }, []);
 
   // PDF 로드
   useEffect(() => {
-    if (!pdfDocument.file) return;
+    if (!pdfDocument.file || !pdfjs) return;
 
     const loadPDF = async () => {
       const fileReader = new FileReader();
@@ -46,7 +49,7 @@ export default function PDFViewer({ onCropComplete }: PDFViewerProps) {
     };
 
     loadPDF();
-  }, [pdfDocument.file]);
+  }, [pdfDocument.file, pdfjs]);
 
   // 페이지 렌더링
   useEffect(() => {
@@ -105,6 +108,14 @@ export default function PDFViewer({ onCropComplete }: PDFViewerProps) {
   const currentPageTranslations = translatedAreas.filter(
     (area) => area.cropArea.pageNumber === pdfDocument.currentPage && area.isVisible
   );
+
+  if (!pdfjs) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-gray-500">PDF 뷰어를 로드하는 중...</p>
+      </div>
+    );
+  }
 
   return (
     <div
