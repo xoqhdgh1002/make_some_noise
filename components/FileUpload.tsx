@@ -103,6 +103,8 @@ export default function FileUpload() {
     setIsLoading(true);
 
     try {
+      console.log('웹페이지 캡처 요청:', url);
+
       // 서버에 웹페이지 스크린샷 요청
       const response = await fetch('/api/webpage-to-pdf', {
         method: 'POST',
@@ -113,16 +115,44 @@ export default function FileUpload() {
       });
 
       if (!response.ok) {
-        throw new Error('웹페이지 변환 실패');
+        // 서버에서 반환한 구체적인 오류 메시지 파싱
+        const errorData = await response.json();
+        console.error('서버 오류:', errorData);
+
+        let errorMsg = errorData.error || '웹페이지 변환 실패';
+        if (errorData.suggestion) {
+          errorMsg += '\n\n💡 ' + errorData.suggestion;
+        }
+        if (errorData.details) {
+          console.error('상세 오류:', errorData.details);
+        }
+
+        alert(errorMsg);
+        return;
       }
 
       const blob = await response.blob();
+
+      // PDF가 제대로 생성되었는지 확인
+      if (blob.size === 0) {
+        throw new Error('빈 PDF가 생성되었습니다.');
+      }
+
+      console.log('PDF 생성 성공, 크기:', blob.size, 'bytes');
+
       const file = new File([blob], 'webpage.pdf', { type: 'application/pdf' });
       setPdfDocument({ file, numPages: 0, currentPage: 1 });
       setUrl(''); // 입력 필드 초기화
     } catch (error) {
       console.error('웹페이지 로드 오류:', error);
-      alert('웹페이지를 불러오는 중 오류가 발생했습니다. URL을 확인해주세요.');
+
+      let errorMsg = '웹페이지를 불러오는 중 오류가 발생했습니다.';
+      if (error instanceof Error) {
+        errorMsg += '\n\n상세: ' + error.message;
+      }
+      errorMsg += '\n\n💡 URL을 확인하거나 잠시 후 다시 시도해주세요.';
+
+      alert(errorMsg);
     } finally {
       setIsLoading(false);
     }
